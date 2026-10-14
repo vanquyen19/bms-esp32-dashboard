@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BMS Pro — Mạch Quản Lý Pin Thông Minh</title>
+  <meta name="description" content="Hệ thống giám sát pin thông minh 10S 36V – theo dõi điện áp, dòng xả, nhiệt độ, SOC, SOH theo thời gian thực qua ESP32." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">⚡</div>
+      <div class="logo-text">
+        <span class="logo-title">BMS Pro</span>
+        <span class="logo-sub">10S · 36V · ESP32</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-tab="dashboard" id="nav-dashboard">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Dashboard</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="cells" id="nav-cells">
+        <span class="nav-icon">🔋</span>
+        <span class="nav-label">Ô Pin (10 Cell)</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="datalog" id="nav-datalog">
+        <span class="nav-icon">📈</span>
+        <span class="nav-label">Thu Thập Dữ Liệu</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="algorithms" id="nav-algorithms">
+        <span class="nav-icon">🧠</span>
+        <span class="nav-label">AEKF &amp; CUSUM</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="alerts" id="nav-alerts">
+        <span class="nav-icon">🚨</span>
+        <span class="nav-label">Cảnh Báo</span>
+        <span class="nav-badge" id="alert-badge">0</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="settings" id="nav-settings">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">Cài Đặt</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-status">
+      <div class="status-dot" id="conn-dot"></div>
+      <span id="conn-label">Đang kết nối...</span>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <main class="main-content">
+
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <button class="menu-toggle" id="menu-toggle" aria-label="Toggle sidebar">☰</button>
+      <div class="topbar-title" id="page-title">Dashboard Tổng Quan</div>
+      <div class="topbar-right">
+        <div class="topbar-time" id="topbar-clock">--:--:--</div>
+        <button class="btn-icon" id="btn-refresh" title="Làm mới">↻</button>
+        <button class="btn-icon" id="btn-export-csv" title="Xuất CSV">⬇ CSV</button>
+        <button class="btn-icon" id="btn-print" title="In báo cáo">🖨 In</button>
+      </div>
+    </header>
+
+    <!-- ===== TAB: DASHBOARD ===== -->
+    <section class="tab-content active" id="tab-dashboard">
+
+      <!-- KPI Strip -->
+      <div class="kpi-strip">
+        <div class="kpi-card" id="kpi-voltage">
+          <div class="kpi-icon">⚡</div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kv-voltage">--.-</div>
+            <div class="kpi-unit">V</div>
+          </div>
+          <div class="kpi-label">Điện Áp Tổng</div>
+        </div>
+        <div class="kpi-card" id="kpi-current">
+          <div class="kpi-icon">🔌</div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kv-current">--.-</div>
+            <div class="kpi-unit">A</div>
+          </div>
+          <div class="kpi-label">Dòng Xả</div>
+        </div>
+        <div class="kpi-card" id="kpi-soc">
+          <div class="kpi-icon">📶</div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kv-soc">--</div>
+            <div class="kpi-unit">%</div>
+          </div>
+          <div class="kpi-label">SOC (Pin Còn)</div>
+        </div>
+        <div class="kpi-card" id="kpi-soh">
+          <div class="kpi-icon">🩺</div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kv-soh">--</div>
+            <div class="kpi-unit">%</div>
+          </div>
+          <div class="kpi-label">SOH (Sức Khoẻ)</div>
+        </div>
+        <div class="kpi-card" id="kpi-temp">
+          <div class="kpi-icon">🌡</div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kv-temp">--.-</div>
+            <div class="kpi-unit">°C</div>
+          </div>
+          <div class="kpi-label">Nhiệt Độ</div>
+        </div>
+        <div class="kpi-card" id="kpi-power">
+          <div class="kpi-icon">💡</div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kv-power">--.-</div>
+            <div class="kpi-unit">W</div>
+          </div>
+          <div class="kpi-label">Công Suất</div>
+        </div>
+      </div>
+
+      <!-- Chart Row -->
+      <div class="chart-row">
+        <div class="glass-card chart-card big">
+          <div class="card-header">
+            <h2>Điện Áp &amp; Dòng Điện Thời Gian Thực</h2>
+            <div class="chart-legend">
+              <span class="legend-dot teal"></span> Điện Áp (V)
+              <span class="legend-dot orange"></span> Dòng Xả (A)
+            </div>
+          </div>
+          <canvas id="chart-realtime" height="180"></canvas>
+        </div>
+        <div class="glass-card chart-card small">
+          <div class="card-header"><h2>Nhiệt Độ</h2></div>
+          <canvas id="chart-temp" height="180"></canvas>
+        </div>
+      </div>
+
+      <!-- Gauge Row -->
+      <div class="gauge-row">
+        <div class="glass-card gauge-card">
+          <div class="card-header"><h2>SOC — Dung Lượng Còn Lại</h2></div>
+          <div class="gauge-wrap">
+            <canvas id="gauge-soc" width="220" height="220"></canvas>
+            <div class="gauge-center" id="gauge-soc-label">--%</div>
+          </div>
+          <div class="gauge-meta" id="soc-meta">Tổng dung lượng: -- Ah</div>
+        </div>
+        <div class="glass-card gauge-card">
+          <div class="card-header"><h2>SOH — Sức Khoẻ Pin</h2></div>
+          <div class="gauge-wrap">
+            <canvas id="gauge-soh" width="220" height="220"></canvas>
+            <div class="gauge-center" id="gauge-soh-label">--%</div>
+          </div>
+          <div class="gauge-meta" id="soh-meta">Trạng thái: --</div>
+        </div>
+        <div class="glass-card gauge-card">
+          <div class="card-header"><h2>Nhiệt Độ Hệ Thống</h2></div>
+          <div class="gauge-wrap">
+            <canvas id="gauge-temp" width="220" height="220"></canvas>
+            <div class="gauge-center" id="gauge-temp-label">--°C</div>
+          </div>
+          <div class="gauge-meta" id="temp-meta">Giới hạn an toàn: 60°C</div>
+        </div>
+        <div class="glass-card gauge-card">
+          <div class="card-header"><h2>LED Trạng Thái</h2></div>
+          <div class="led-panel" id="led-panel">
+            <div class="led-item">
+              <div class="led-dot green" id="led-ok"></div>
+              <span>Bình Thường</span>
+            </div>
+            <div class="led-item">
+              <div class="led-dot yellow" id="led-warn"></div>
+              <span>Cảnh Báo</span>
+            </div>
+            <div class="led-item">
+              <div class="led-dot red" id="led-err"></div>
+              <span>Nguy Hiểm</span>
+            </div>
+            <div class="led-item">
+              <div class="led-dot blue" id="led-charge"></div>
+              <span>Đang Sạc</span>
+            </div>
+          </div>
+          <div class="led-status-text" id="led-status-text">Đang tải trạng thái...</div>
+        </div>
+      </div>
+
+      <!-- Cell Mini Preview -->
+      <div class="glass-card">
+        <div class="card-header">
+          <h2>Tổng Quan 10 Ô Pin (Cell)</h2>
+          <button class="btn-sm" onclick="switchTab('cells')">Xem chi tiết →</button>
+        </div>
+        <div class="cell-mini-grid" id="cell-mini-grid"></div>
+      </div>
+    </section>
+
+    <!-- ===== TAB: CELLS ===== -->
+    <section class="tab-content" id="tab-cells">
+      <div class="glass-card">
+        <div class="card-header">
+          <h2>🔋 Chi Tiết 10 Ô Pin — SH367309</h2>
+          <div class="cell-controls">
+            <label>Sắp xếp:
+              <select id="cell-sort">
+                <option value="index">Theo số thứ tự</option>
+                <option value="voltage-asc">Điện áp ↑</option>
+                <option value="voltage-desc">Điện áp ↓</option>
+                <option value="status">Theo trạng thái</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="cell-grid" id="cell-grid"></div>
+      </div>
+
+      <div class="chart-row" style="margin-top:1.5rem">
+        <div class="glass-card chart-card big">
+          <div class="card-header"><h2>So Sánh Điện Áp Các Ô Pin</h2></div>
+          <canvas id="chart-cells" height="200"></canvas>
+        </div>
+        <div class="glass-card chart-card small">
+          <div class="card-header"><h2>Điện Trở Trong (mΩ)</h2></div>
+          <canvas id="chart-resistance" height="200"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== TAB: DATALOG ===== -->
+    <section class="tab-content" id="tab-datalog">
+      <div class="glass-card">
+        <div class="card-header">
+          <h2>📈 Thu Thập Dữ Liệu Dài Hạn — Kiểm Tra Nội Sở</h2>
+        </div>
+
+        <div class="datalog-config">
+          <div class="config-group">
+            <label>Thời gian lấy mẫu</label>
+            <select id="dl-interval">
+              <option value="1000">1 giây</option>
+              <option value="5000" selected>5 giây</option>
+              <option value="30000">30 giây</option>
+              <option value="60000">1 phút</option>
+              <option value="300000">5 phút</option>
+              <option value="600000">10 phút</option>
+            </select>
+          </div>
+          <div class="config-group">
+            <label>Thời gian thu thập</label>
+            <select id="dl-duration">
+              <option value="1">1 Ngày</option>
+              <option value="7">1 Tuần</option>
+              <option value="14">2 Tuần</option>
+              <option value="30" selected>1 Tháng</option>
+              <option value="60">2 Tháng</option>
+              <option value="90">3 Tháng</option>
+            </select>
+          </div>
+          <div class="config-group">
+            <label>Kênh ghi</label>
+            <div class="checkbox-group">
+              <label><input type="checkbox" id="dl-ch-voltage" checked /> Điện áp từng ô</label>
+              <label><input type="checkbox" id="dl-ch-current" checked /> Dòng xả</label>
+              <label><input type="checkbox" id="dl-ch-temp" checked /> Nhiệt độ</label>
+              <label><input type="checkbox" id="dl-ch-soc" checked /> SOC (AEKF)</label>
+              <label><input type="checkbox" id="dl-ch-soh" checked /> SOH</label>
+              <label><input type="checkbox" id="dl-ch-resist" /> Điện trở trong</label>
+              <label><input type="checkbox" id="dl-ch-cusum" /> CUSUM score</label>
+            </div>
+          </div>
+          <div class="config-group">
+            <label>Lưu trữ</label>
+            <div class="storage-options">
+              <label><input type="radio" name="dl-storage" value="spiffs" checked /> SPIFFS (Flash ESP32)</label>
+              <label><input type="radio" name="dl-storage" value="sd" /> SD Card</label>
+              <label><input type="radio" name="dl-storage" value="cloud" /> Cloud MQTT</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="datalog-actions">
+          <button class="btn-primary" id="btn-dl-start">▶ Bắt đầu thu thập</button>
+          <button class="btn-danger" id="btn-dl-stop" disabled>⏹ Dừng</button>
+          <button class="btn-secondary" id="btn-dl-export">⬇ Xuất CSV</button>
+          <button class="btn-secondary" id="btn-dl-export-json">⬇ Xuất JSON</button>
+          <button class="btn-secondary" id="btn-dl-clear">🗑 Xoá dữ liệu</button>
+        </div>
+
+        <div class="dl-progress-wrap" id="dl-progress-wrap" style="display:none">
+          <div class="dl-progress-info">
+            <span>Đang thu thập...</span>
+            <span id="dl-rec-count">0 bản ghi</span>
+            <span id="dl-elapsed">0s</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="dl-progress-fill" style="width:0%"></div>
+          </div>
+          <div class="dl-storage-usage">
+            <span>Bộ nhớ đã dùng: <strong id="dl-mem-used">0 KB</strong> / <strong id="dl-mem-total">4 MB</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-card" style="margin-top:1.5rem">
+        <div class="card-header">
+          <h2>Biểu Đồ Dữ Liệu Dài Hạn</h2>
+          <div class="chart-controls">
+            <select id="dl-chart-channel">
+              <option value="soc">SOC (%)</option>
+              <option value="voltage">Điện áp (V)</option>
+              <option value="current">Dòng xả (A)</option>
+              <option value="temp">Nhiệt độ (°C)</option>
+              <option value="soh">SOH (%)</option>
+            </select>
+            <select id="dl-chart-range">
+              <option value="1">24h qua</option>
+              <option value="7">7 ngày</option>
+              <option value="30">30 ngày</option>
+              <option value="all">Toàn bộ</option>
+            </select>
+          </div>
+        </div>
+        <canvas id="chart-longterm" height="220"></canvas>
+      </div>
+
+      <div class="glass-card" style="margin-top:1.5rem">
+        <div class="card-header">
+          <h2>Bảng Dữ Liệu Gần Nhất</h2>
+          <input type="text" placeholder="🔍 Lọc theo thời gian..." id="dl-filter" class="filter-input" />
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="dl-table">
+            <thead>
+              <tr>
+                <th>Thời Gian</th>
+                <th>V Tổng</th>
+                <th>Dòng (A)</th>
+                <th>Nhiệt °C</th>
+                <th>SOC %</th>
+                <th>SOH %</th>
+                <th>Trạng Thái</th>
+              </tr>
+            </thead>
+            <tbody id="dl-table-body">
+              <tr><td colspan="7" class="table-empty">Chưa có dữ liệu. Bấm "Bắt đầu thu thập".</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-pagination">
+          <button class="btn-sm" id="dl-prev-page" disabled>← Trước</button>
+          <span id="dl-page-info">Trang 1 / 1</span>
+          <button class="btn-sm" id="dl-next-page" disabled>Tiếp →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== TAB: ALGORITHMS ===== -->
+    <section class="tab-content" id="tab-algorithms">
+      <div class="algo-grid">
+        <div class="glass-card">
+          <div class="card-header">
+            <h2>🧠 AEKF — Bộ Lọc Kalman Thích Nghi</h2>
+          </div>
+          <div class="algo-params" id="aekf-params">
+            <div class="param-row"><span>SOC ước lượng</span><strong id="aekf-soc">-- %</strong></div>
+            <div class="param-row"><span>Điện trở trong (R₀)</span><strong id="aekf-r0">-- mΩ</strong></div>
+            <div class="param-row"><span>Sai số ước lượng (P)</span><strong id="aekf-p">--</strong></div>
+            <div class="param-row"><span>Hệ số thích nghi (λ)</span><strong id="aekf-lambda">--</strong></div>
+            <div class="param-row"><span>Nhiễu đo lường (R_noise)</span><strong id="aekf-rnoise">--</strong></div>
+            <div class="param-row"><span>Nhiễu quá trình (Q_noise)</span><strong id="aekf-qnoise">--</strong></div>
+          </div>
+          <canvas id="chart-aekf" height="180" style="margin-top:1rem"></canvas>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-header">
+            <h2>📉 CUSUM — Phát Hiện Lỗi Tích Luỹ</h2>
+          </div>
+          <div class="cusum-cells" id="cusum-cells"></div>
+          <canvas id="chart-cusum" height="180" style="margin-top:1rem"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== TAB: ALERTS ===== -->
+    <section class="tab-content" id="tab-alerts">
+      <div class="glass-card">
+        <div class="card-header">
+          <h2>🚨 Nhật Ký Cảnh Báo</h2>
+          <div>
+            <button class="btn-sm" id="btn-clear-alerts">Xoá tất cả</button>
+            <select id="alert-filter-type">
+              <option value="all">Tất cả</option>
+              <option value="error">Lỗi nghiêm trọng</option>
+              <option value="warning">Cảnh báo</option>
+              <option value="info">Thông tin</option>
+            </select>
+          </div>
+        </div>
+        <div class="alert-list" id="alert-list">
+          <div class="alert-empty">Không có cảnh báo nào. Hệ thống hoạt động bình thường ✅</div>
+        </div>
+      </div>
+
+      <div class="glass-card" style="margin-top:1.5rem">
+        <div class="card-header"><h2>⚙️ Ngưỡng Cảnh Báo</h2></div>
+        <div class="threshold-grid">
+          <div class="threshold-item">
+            <label>Điện áp ô tối thiểu (V)</label>
+            <input type="number" id="th-cell-min" value="2.8" step="0.1" min="2.0" max="4.0" />
+          </div>
+          <div class="threshold-item">
+            <label>Điện áp ô tối đa (V)</label>
+            <input type="number" id="th-cell-max" value="4.2" step="0.1" min="3.5" max="4.5" />
+          </div>
+          <div class="threshold-item">
+            <label>Dòng xả tối đa (A)</label>
+            <input type="number" id="th-current-max" value="20" step="1" min="1" max="100" />
+          </div>
+          <div class="threshold-item">
+            <label>Nhiệt độ tối đa (°C)</label>
+            <input type="number" id="th-temp-max" value="60" step="1" min="40" max="80" />
+          </div>
+          <div class="threshold-item">
+            <label>SOC tối thiểu (%)</label>
+            <input type="number" id="th-soc-min" value="10" step="1" min="5" max="30" />
+          </div>
+          <div class="threshold-item">
+            <label>CUSUM ngưỡng phát hiện</label>
+            <input type="number" id="th-cusum" value="5.0" step="0.5" min="1" max="20" />
+          </div>
+        </div>
+        <button class="btn-primary" id="btn-save-thresholds">💾 Lưu Ngưỡng vào ESP32</button>
+      </div>
+    </section>
+
+    <!-- ===== TAB: SETTINGS ===== -->
+    <section class="tab-content" id="tab-settings">
+      <div class="settings-grid">
+
+        <div class="glass-card">
+          <div class="card-header"><h2>📡 Kết Nối ESP32</h2></div>
+          <div class="settings-form">
+            <label>Địa chỉ IP ESP32</label>
+            <input type="text" id="set-ip" value="192.168.1.100" />
+            <label>Port</label>
+            <input type="number" id="set-port" value="80" />
+            <label>Tần suất cập nhật (ms)</label>
+            <input type="number" id="set-poll" value="1000" min="200" max="10000" step="100" />
+            <label>WiFi SSID</label>
+            <input type="text" id="set-ssid" value="" placeholder="Tên mạng WiFi" />
+            <label>WiFi Password</label>
+            <input type="password" id="set-pass" value="" placeholder="Mật khẩu WiFi" />
+            <button class="btn-primary" id="btn-save-conn">💾 Lưu &amp; Kết nối</button>
+          </div>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-header"><h2>🖨 In &amp; Xuất Báo Cáo</h2></div>
+          <div class="settings-form">
+            <label>Tiêu đề báo cáo</label>
+            <input type="text" id="rpt-title" value="Báo Cáo Kiểm Tra Pin BMS" />
+            <label>Tên dự án</label>
+            <input type="text" id="rpt-project" value="BMS 10S 36V — AEKF/CUSUM" />
+            <label>Người thực hiện</label>
+            <input type="text" id="rpt-author" value="" placeholder="Họ tên..." />
+            <label>Bao gồm trong báo cáo</label>
+            <div class="checkbox-group">
+              <label><input type="checkbox" id="rpt-cells" checked /> Bảng điện áp từng ô</label>
+              <label><input type="checkbox" id="rpt-charts" checked /> Biểu đồ thời gian thực</label>
+              <label><input type="checkbox" id="rpt-longterm" checked /> Dữ liệu dài hạn</label>
+              <label><input type="checkbox" id="rpt-alerts" checked /> Nhật ký cảnh báo</label>
+              <label><input type="checkbox" id="rpt-algo" checked /> Tham số AEKF/CUSUM</label>
+            </div>
+            <div class="print-buttons">
+              <button class="btn-primary" id="btn-print-report">🖨 In Báo Cáo PDF</button>
+              <button class="btn-secondary" id="btn-preview-report">👁 Xem Trước</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-header"><h2>💡 Điều Khiển LED &amp; Buzzer</h2></div>
+          <div class="led-control-grid">
+            <div class="led-ctrl-item">
+              <span>LED Xanh (Bình thường)</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="led-ctrl-green" checked onchange="sendLEDCommand('green', this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="led-ctrl-item">
+              <span>LED Vàng (Cảnh báo)</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="led-ctrl-yellow" onchange="sendLEDCommand('yellow', this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="led-ctrl-item">
+              <span>LED Đỏ (Nguy hiểm)</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="led-ctrl-red" onchange="sendLEDCommand('red', this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="led-ctrl-item">
+              <span>LED Xanh Dương (Sạc)</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="led-ctrl-blue" onchange="sendLEDCommand('blue', this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="led-ctrl-item">
+              <span>Còi Buzzer</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="led-ctrl-buzzer" onchange="sendLEDCommand('buzzer', this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="led-ctrl-item">
+              <span>Chế độ nhấp nháy</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="led-ctrl-blink" onchange="sendLEDCommand('blink', this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="brightness-ctrl">
+            <label>Độ sáng LED: <span id="bright-val">80</span>%</label>
+            <input type="range" id="led-brightness" min="0" max="100" value="80"
+              oninput="document.getElementById('bright-val').textContent=this.value;sendLEDCommand('brightness',this.value)" />
+          </div>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-header"><h2>🔧 Thông Tin Hệ Thống</h2></div>
+          <div class="sysinfo-grid" id="sysinfo-grid">
+            <div class="si-row"><span>ESP32 Firmware</span><strong id="si-fw">--</strong></div>
+            <div class="si-row"><span>Chip SH367309</span><strong id="si-chip">--</strong></div>
+            <div class="si-row"><span>Uptime</span><strong id="si-uptime">--</strong></div>
+            <div class="si-row"><span>Free Heap</span><strong id="si-heap">-- KB</strong></div>
+            <div class="si-row"><span>WiFi RSSI</span><strong id="si-rssi">-- dBm</strong></div>
+            <div class="si-row"><span>Địa chỉ IP</span><strong id="si-ip">--</strong></div>
+            <div class="si-row"><span>Số bản ghi đã lưu</span><strong id="si-records">--</strong></div>
+            <div class="si-row"><span>Bộ nhớ Flash dùng</span><strong id="si-flash">--</strong></div>
+          </div>
+          <button class="btn-danger btn-sm" id="btn-reboot" style="margin-top:1rem">↺ Khởi động lại ESP32</button>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== PRINT OVERLAY ===== -->
+  <div class="print-overlay" id="print-overlay" style="display:none">
+    <div class="print-doc" id="print-doc"></div>
+  </div>
+
+  <!-- ===== TOAST ===== -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
